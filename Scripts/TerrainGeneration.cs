@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,6 +6,7 @@ public class TerrainGeneration : MonoBehaviour {
     [Header("Scale")]
     public float scale = 10;
     public float heightMultiplier = 4;
+    public int chunkSize = 64;
     [Header("Materials")]
     public Material primaryMaterial;
     [Header("Details")]
@@ -30,12 +31,13 @@ public class TerrainGeneration : MonoBehaviour {
         int height = heightMap.height - 1;
         vertexOffset = new Vector3(-width / 2f, 0, -height / 2f);
 
-        for (int I = 0; I < heightMap.width / 64; ++I)
+        for (int I = 0; I < heightMap.width / chunkSize; ++I)
         {
-            for (int J = 0; J < heightMap.height / 64; ++J)
+            for (int J = 0; J < heightMap.height / chunkSize; ++J)
             {
                 List<Vector3> grassVerts = new List<Vector3>();
                 List<int> grassTris = new List<int>();
+                List<Vector2> grassUV = new List<Vector2>();
 
                 GameObject terrainChunk = new GameObject("TerrainChunk");
                 terrainChunk.transform.parent = transform;
@@ -45,24 +47,24 @@ public class TerrainGeneration : MonoBehaviour {
                     for (int j = 0; j < 63; ++j)
                     {
                         // First Triangle
-                        VertexSetup(grassVerts, grassTris, i + I * 63, j + 1 + J * 63);
-                        VertexSetup(grassVerts, grassTris, i + 1 + I * 63, j + 1 + J * 63);
-                        VertexSetup(grassVerts, grassTris, i + I * 63, j + J * 63);
+                        VertexSetup(grassVerts, grassTris, grassUV, i + I * (chunkSize - 1), j + 1 + J * (chunkSize - 1));
+                        VertexSetup(grassVerts, grassTris, grassUV, i + 1 + I * (chunkSize - 1), j + 1 + J * (chunkSize - 1));
+                        VertexSetup(grassVerts, grassTris, grassUV, i + I * 63, j + J * 63);
 
                         // Second Triangle
-                        VertexSetup(grassVerts, grassTris, i + I * 63, j + J * 63);
-                        VertexSetup(grassVerts, grassTris, i + 1 + I * 63, j + 1 + J * 63);
-                        VertexSetup(grassVerts, grassTris, i + 1 + I * 63, j + J * 63);
+                        VertexSetup(grassVerts, grassTris, grassUV, i + I * (chunkSize - 1), j + J * (chunkSize - 1));
+                        VertexSetup(grassVerts, grassTris, grassUV, i + 1 + I * (chunkSize - 1), j + 1 + J * (chunkSize - 1));
+                        VertexSetup(grassVerts, grassTris, grassUV, i + 1 + I * (chunkSize - 1), j + J * (chunkSize - 1));
 
                         // Details
-                        if (detailMap != null && details.Length > 0 && detailMap.GetPixel(i + I * 63, j + J * 63).r > 0.7f)
+                        if (detailMap != null && details.Length > 0 && detailMap.GetPixel(i + I * (chunkSize - 1), j + J * (chunkSize - 1)).r > 0.7f)
                         {
-                            DetailSetup(i + I * 63, j + J * 63, terrainChunk.transform);
+                            DetailSetup(i + I * (chunkSize - 1), j + J * (chunkSize - 1), terrainChunk.transform);
                         }
                     }
                 }
 
-                GameObjectSetup(terrainChunk, primaryMaterial, grassVerts, grassTris);
+                GameObjectSetup(terrainChunk, primaryMaterial, grassVerts, grassTris,grassUV);
             }
         }
     }
@@ -77,15 +79,20 @@ public class TerrainGeneration : MonoBehaviour {
     }
 
     // Adds a new Vertex
-    void VertexSetup(List<Vector3> verts, List<int> tris, int i, int j)
+    void VertexSetup(List<Vector3> verts, List<int> tris,List<Vector2> uv, int i, int j)
     {
         verts.Add(TerrainPoint(i,j));
         tris.Add(tris.Count);
+        uv.Add(new Vector2(i, j));
     }
 
     // Adds a detail onto the terrain
     void DetailSetup(int i, int j,Transform parent)
     {
+        int detailIndex = Random.Range(0, 1000) % details.Length;
+        if (details[detailIndex] == null)
+            return;
+
         Vector2 offsetBase = new Vector2(Random.value, Random.value) * 0.75f;
         Vector3 x;
         Vector3 y;
@@ -100,17 +107,18 @@ public class TerrainGeneration : MonoBehaviour {
             y = Vector3.Lerp(TerrainPoint(i, j), TerrainPoint(i, j + 1), offsetBase.y);
         }
         Vector3 finalPosition = Vector3.Lerp(x, y, 0.5f);
-        GameObject tree = Instantiate(details[Random.Range(0, 1000) % details.Length], finalPosition + Vector3.down * 0.1f + transform.position.y * Vector3.up, Quaternion.Euler(0, Random.Range(0, 359), 0),transform);
+        GameObject tree = Instantiate(details[detailIndex], finalPosition + Vector3.down * 0.1f + transform.position.y * Vector3.up, Quaternion.Euler(0, Random.Range(0, 359), 0),transform);
         tree.transform.parent = parent;
     }
 
     // Adds MeshFilter(with the mesh itself),MeshRenderer and MeshCollider onto a GameObject
-    void GameObjectSetup(GameObject targetGameObject, Material material, List<Vector3> verts, List<int> tris)
+    void GameObjectSetup(GameObject targetGameObject, Material material, List<Vector3> verts, List<int> tris, List<Vector2> uv)
     {
         Mesh mesh = new Mesh
         {
             vertices = verts.ToArray(),
-            triangles = tris.ToArray()
+            triangles = tris.ToArray(),
+            uv = uv.ToArray()
         };
 
         mesh.RecalculateNormals();
